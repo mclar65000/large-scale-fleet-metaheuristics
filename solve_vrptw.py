@@ -62,3 +62,55 @@ search_parameters.time_limit.seconds = 30
 print("Solving VRPTW with Google OR-Tools...")
 solution = routing.SolveWithParameters(search_parameters)
 
+# 7. Print Schedules & Export Map
+if solution:
+    print("\n=== OPTIMAL ROUTES FOUND ===")
+    map_austin = folium.Map(
+        location=[df.loc[depot_index, 'latitude'], df.loc[depot_index, 'longitude']],
+        zoom_start=12
+    )
+    colors = ['red', 'blue', 'green', 'purple', 'orange', 'darkred', 'cadetblue']
+
+    for vehicle_id in range(num_vehicles):
+        index = routing.Start(vehicle_id)
+        plan_output = f"\nVehicle {vehicle_id + 1}:\n"
+        route_coords = []
+        
+        while not routing.IsEnd(index):
+            node = manager.IndexToNode(index)
+            time_var = time_dimension.CumulVar(index)
+            plan_output += f"  -> Stop {node:02d} ({df.loc[node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
+            
+            lat, lon = df.loc[node, 'latitude'], df.loc[node, 'longitude']
+            route_coords.append((lat, lon))
+            
+            folium.Marker(
+                location=[lat, lon],
+                popup=f"V{vehicle_id + 1} - Stop {node}: {df.loc[node, 'name']}",
+                icon=folium.Icon(color=colors[vehicle_id % len(colors)])
+            ).add_to(map_austin)
+            
+            index = solution.Value(routing.NextVar(index))
+
+        # Depot Return
+        node = manager.IndexToNode(index)
+        time_var = time_dimension.CumulVar(index)
+        plan_output += f"  -> Return Depot ({df.loc[node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
+        route_coords.append((df.loc[node, 'latitude'], df.loc[node, 'longitude']))
+        
+        print(plan_output)
+
+        # Draw Route Line
+        folium.PolyLine(
+            route_coords, 
+            color=colors[vehicle_id % len(colors)], 
+            weight=3, 
+            opacity=0.8,
+            tooltip=f"Vehicle {vehicle_id + 1} Route"
+        ).add_to(map_austin)
+
+    map_austin.save('route_map.html')
+    print("\nSUCCESS! Saved interactive route map to 'route_map.html'.")
+else:
+    print("No solution found. Consider increasing vehicle count or relaxing time windows.")
+
