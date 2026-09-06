@@ -18,4 +18,28 @@ routing = pywrapcp.RoutingModel(manager)
 # 3. Travel Time Callback (Travel Time + Service Duration)
 service_times = df['service_time_sec'].tolist()
 
+# Inline lambda callback required by OR-Tools
+transit_callback_index = routing.RegisterTransitCallback(
+    lambda from_idx, to_idx: time_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)] + service_times[manager.IndexToNode(from_idx)]
+)
+routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
+# 4. Add Time Window Constraints
+time_dimension_name = 'Time'
+routing.AddDimension(
+    transit_callback_index,
+    3600,   # Allow up to 1 hour (3600s) of waiting time if a vehicle arrives early
+    28800,  # Max vehicle shift duration (8 hours = 28800s)
+    False,  # Do not force cumulative time to zero at start
+    time_dimension_name
+)
+time_dimension = routing.GetDimensionOrDie(time_dimension_name)
+
+# Set individual open/close time windows from CSV
+for location_idx, row in df.iterrows():
+    index = manager.NodeToIndex(location_idx)
+    time_dimension.CumulVar(index).SetRange(
+        int(row['tw_open_sec']), 
+        int(row['tw_close_sec'])
+    )
+    
