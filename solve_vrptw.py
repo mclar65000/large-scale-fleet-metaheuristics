@@ -11,3 +11,11 @@ num_locations = len(df)
 num_vehicles = 5
 depot_index = 0
 
+# 2. Initialize Routing Engine
+manager = pywrapcp.RoutingIndexManager(num_locations, num_vehicles, depot_index)
+routing = pywrapcp.RoutingModel(manager)
+
+# 3. Travel Time Callback (Travel Time + Service Duration)
+service_times = df['service_time_sec'].tolist()
+
+
