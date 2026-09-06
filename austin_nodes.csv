@@ -1,0 +1,51 @@
+id,name,latitude,longitude,tw_open_sec,tw_close_sec,service_time_sec
+0,Central Depot (Downtown),30.2672,-97.7431,0,28800,0
+1,Mozart's Coffee Roasters,30.2933,-97.7846,1800,7200,600
+2,Caffe Medici,30.3012,-97.7383,3600,10800,600
+3,Radio Coffee & Beer,30.2361,-97.786,1800,9000,600
+4,Fleet Coffee,30.2621,-97.7171,0,14400,600
+5,Houndstooth Coffee,30.3078,-97.7402,3600,10800,600
+6,Bouldin Creek Cafe,30.252,-97.755,0,18000,600
+7,Cosmic Coffee + Beer Garden,30.2227,-97.7621,1800,14400,600
+8,Figure 8 Coffee Purveyors,30.2652,-97.7214,3600,12000,600
+9,Epoch Coffee,30.3168,-97.7247,0,18000,600
+10,Flat Track Coffee,30.2575,-97.7128,1800,14400,600
+11,Merit Coffee (Seaholm),30.2688,-97.7513,0,10800,600
+12,L'Oven / Greater Goods Coffee,30.2581,-97.7024,1800,12000,600
+13,Franklin Barbecue,30.2701,-97.7313,7200,21600,900
+14,Home Slice Pizza,30.2497,-97.7496,7200,21600,600
+15,Terry Black's BBQ,30.2597,-97.7548,7200,21600,900
+16,La Barbecue,30.2562,-97.7196,7200,21600,900
+17,Micklethwait Craft Meats,30.2709,-97.7219,7200,21600,900
+18,Loro Asian Smokehouse,30.2443,-97.7588,10800,25200,600
+19,Matt's El Rancho,30.2464,-97.7686,10800,25200,600
+20,Torchy's Tacos (South Congress),30.248,-97.7502,3600,18000,600
+21,Pecos Walton Tacos / Veracruz All Natural,30.2536,-97.7082,1800,14400,600
+22,Perla's Seafood & Oyster Bar,30.2514,-97.7491,10800,25200,600
+23,Ramen Tatsu-Ya (East),30.2646,-97.7275,10800,25200,600
+24,Moonshine Patio Bar & Grill,30.2639,-97.738,7200,21600,600
+25,Cidercade Austin,30.2488,-97.7317,14400,25200,600
+26,The Continental Club,30.2505,-97.7492,14400,28800,600
+27,Moody Center,30.2808,-97.7323,7200,28800,900
+28,Paramount Theatre,30.2694,-97.7421,7200,25200,600
+29,Austin City Limits Live (ACL Live),30.2654,-97.747,7200,28800,600
+30,Cheer Up Charlies,30.2673,-97.736,14400,28800,600
+31,Hotel Vegas,30.2619,-97.7246,14400,28800,600
+32,Elephant Room,30.2659,-97.7429,14400,28800,600
+33,Texas State Capitol,30.2747,-97.7404,0,18000,900
+34,Austin Central Library,30.266,-97.7518,3600,21600,600
+35,Zilker Metropolitan Park,30.2669,-97.7728,0,28800,600
+36,Barton Springs Pool,30.2638,-97.7712,0,21600,600
+37,LBJ Presidential Library,30.2858,-97.7293,3600,18000,900
+38,Blanton Museum of Art,30.2806,-97.7375,3600,18000,600
+39,The Contemporary Austin - Jones Center,30.2692,-97.7422,3600,18000,600
+40,UT Tower / Campus,30.2862,-97.7394,0,28800,600
+41,Mount Bonnell,30.321,-97.7734,0,25200,600
+42,Mayfield Park and Nature Preserve,30.3129,-97.7708,0,21600,600
+43,Pease District Park,30.2821,-97.7542,0,21600,600
+44,Waterloo Park,30.2727,-97.735,0,25200,600
+45,Palmer Events Center,30.26,-97.7516,3600,21600,600
+46,Rainey Street Historic District,30.2589,-97.7388,10800,28800,600
+47,Thinkery (Children's Museum),30.2982,-97.7056,3600,18000,600
+48,Mueller Lake Park,30.2965,-97.7032,0,25200,600
+49,South Congress Shopping District,30.249,-97.7498,3600,21600,600
