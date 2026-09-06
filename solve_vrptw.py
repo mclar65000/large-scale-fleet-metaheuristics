@@ -30,7 +30,7 @@ routing.AddDimension(
     transit_callback_index,
     3600,   # Allow up to 1 hour (3600s) of waiting time if a vehicle arrives early
     28800,  # Max vehicle shift duration (8 hours = 28800s)
-    False,  # Do not force cumulative time to zero at start
+    False,  # do not force cumulative time to zero at start
     time_dimension_name
 )
 time_dimension = routing.GetDimensionOrDie(time_dimension_name)
@@ -42,4 +42,23 @@ for location_idx, row in df.iterrows():
         int(row['tw_open_sec']), 
         int(row['tw_close_sec'])
     )
-    
+
+# Minimize total operational shift time across vehicles
+for i in range(num_vehicles):
+    routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
+    routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
+
+# 5. Search Parameters & Guided Local Search Metaheuristic
+search_parameters = pywrapcp.DefaultRoutingSearchParameters()
+search_parameters.first_solution_strategy = (
+    routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
+)
+search_parameters.local_search_metaheuristic = (
+    routing_enums_pb2.LocalSearchMetaheuristic.GUIDED_LOCAL_SEARCH
+)
+search_parameters.time_limit.seconds = 30
+
+# 6. Solve
+print("Solving VRPTW with Google OR-Tools...")
+solution = routing.SolveWithParameters(search_parameters)
+
