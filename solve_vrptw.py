@@ -13,7 +13,7 @@ num_locations = len(df)
 num_vehicles = 5
 depot_index = 0
 
-# 2. Initialize Routing Engine
+# 2. Load Road Network Graph for Street-Level Plotting
 print("Loading Austin road network for exact street route tracing...")
 G = ox.graph_from_place('Austin, Texas, USA', network_type='drive')
 G = ox.add_edge_speeds(G)
@@ -23,10 +23,13 @@ G = ox.truncate.largest_component(G, strongly=True)
 # Map CSV coordinates to the nearest street graph nodes
 osm_nodes = ox.nearest_nodes(G, X=df['longitude'], Y=df['latitude'])
 
-# 3. Travel Time Callback (Travel Time + Service Duration)
+# 3. Initialize Routing Engine
+manager = pywrapcp.RoutingIndexManager(num_locations, num_vehicles, depot_index)
+routing = pywrapcp.RoutingModel(manager)
+
 service_times = df['service_time_sec'].tolist()
 
-# Inline lambda callback required by OR-Tools
+# Register transit callback
 transit_callback_index = routing.RegisterTransitCallback(
     lambda from_idx, to_idx: time_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)] + service_times[manager.IndexToNode(from_idx)]
 )
@@ -36,14 +39,14 @@ routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 time_dimension_name = 'Time'
 routing.AddDimension(
     transit_callback_index,
-    3600,   # Allow up to 1 hour (3600s) of waiting time if a vehicle arrives early
-    28800,  # Max vehicle shift duration (8 hours = 28800s)
-    False,  # do not force cumulative time to zero at start
+    3600,   # waiting time allowed (1 hour)
+    28800,  # Max vehicle shift duration (8 hours)
+    False,  # Do not force start cumulative time to zero
     time_dimension_name
 )
 time_dimension = routing.GetDimensionOrDie(time_dimension_name)
 
-# Set individual open/close time windows from CSV
+# Set time windows per location from CSV
 for location_idx, row in df.iterrows():
     index = manager.NodeToIndex(location_idx)
     time_dimension.CumulVar(index).SetRange(
@@ -51,7 +54,7 @@ for location_idx, row in df.iterrows():
         int(row['tw_close_sec'])
     )
 
-# Minimize total operational shift time across vehicles
+# Minimize shift duration
 for i in range(num_vehicles):
     routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
     routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
@@ -70,7 +73,7 @@ search_parameters.time_limit.seconds = 30
 print("Solving VRPTW with Google OR-Tools...")
 solution = routing.SolveWithParameters(search_parameters)
 
-# 7. Print Schedules & Export Map
+# 7. Print Schedules & Export Interactive Street Map
 if solution:
     print("\n=== OPTIMAL ROUTES FOUND ===")
     map_austin = folium.Map(
@@ -82,16 +85,17 @@ if solution:
     for vehicle_id in range(num_vehicles):
         index = routing.Start(vehicle_id)
         plan_output = f"\nVehicle {vehicle_id + 1}:\n"
-        route_coords = []
+        vehicle_stops = []
         
         while not routing.IsEnd(index):
             node = manager.IndexToNode(index)
+            vehicle_stops.append(node)
             time_var = time_dimension.CumulVar(index)
             plan_output += f"  -> Stop {node:02d} ({df.loc[node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
             
             lat, lon = df.loc[node, 'latitude'], df.loc[node, 'longitude']
-            route_coords.append((lat, lon))
             
+            # Place Marker for Stop
             folium.Marker(
                 location=[lat, lon],
                 popup=f"V{vehicle_id + 1} - Stop {node}: {df.loc[node, 'name']}",
@@ -100,25 +104,37 @@ if solution:
             
             index = solution.Value(routing.NextVar(index))
 
-        # Depot Return
-        node = manager.IndexToNode(index)
+        # Add return to depot stop
+        end_node = manager.IndexToNode(index)
+        vehicle_stops.append(end_node)
         time_var = time_dimension.CumulVar(index)
-        plan_output += f"  -> Return Depot ({df.loc[node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
-        route_coords.append((df.loc[node, 'latitude'], df.loc[node, 'longitude']))
-        
+        plan_output += f"  -> Return Depot ({df.loc[end_node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
         print(plan_output)
 
-        # Draw Route Line
-        folium.PolyLine(
-            route_coords, 
-            color=colors[vehicle_id % len(colors)], 
-            weight=3, 
-            opacity=0.8,
-            tooltip=f"Vehicle {vehicle_id + 1} Route"
-        ).add_to(map_austin)
+        # Tracing exact street geometry node-by-node along the route
+        for i in range(len(vehicle_stops) - 1):
+            orig_osm = osm_nodes[vehicle_stops[i]]
+            dest_osm = osm_nodes[vehicle_stops[i + 1]]
+            
+            try:
+                # Find shortest path along actual road segments
+                path = nx.shortest_path(G, orig_osm, dest_osm, weight='travel_time')
+                street_coords = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in path]
+                
+                folium.PolyLine(
+                    street_coords, 
+                    color=colors[vehicle_id % len(colors)], 
+                    weight=4, 
+                    opacity=0.8,
+                    tooltip=f"Vehicle {vehicle_id + 1} Route"
+                ).add_to(map_austin)
+            except nx.NetworkXNoPath:
+                # Fallback to straight line if path lookup fails
+                loc1 = (df.loc[vehicle_stops[i], 'latitude'], df.loc[vehicle_stops[i], 'longitude'])
+                loc2 = (df.loc[vehicle_stops[i + 1], 'latitude'], df.loc[vehicle_stops[i + 1], 'longitude'])
+                folium.PolyLine([loc1, loc2], color=colors[vehicle_id % len(colors)], weight=3, opacity=0.5).add_to(map_austin)
 
     map_austin.save('route_map.html')
-    print("\nSUCCESS! Saved interactive route map to 'route_map.html'.")
+    print("\nSUCCESS! Saved interactive street-level route map to 'route_map.html'.")
 else:
     print("No solution found. Consider increasing vehicle count or relaxing time windows.")
-
