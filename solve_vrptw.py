@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+import osmnx as ox
+import networkx as nx
 import folium
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
@@ -12,8 +14,14 @@ num_vehicles = 5
 depot_index = 0
 
 # 2. Initialize Routing Engine
-manager = pywrapcp.RoutingIndexManager(num_locations, num_vehicles, depot_index)
-routing = pywrapcp.RoutingModel(manager)
+print("Loading Austin road network for exact street route tracing...")
+G = ox.graph_from_place('Austin, Texas, USA', network_type='drive')
+G = ox.add_edge_speeds(G)
+G = ox.add_edge_travel_times(G)
+G = ox.truncate.largest_component(G, strongly=True)
+
+# Map CSV coordinates to the nearest street graph nodes
+osm_nodes = ox.nearest_nodes(G, X=df['longitude'], Y=df['latitude'])
 
 # 3. Travel Time Callback (Travel Time + Service Duration)
 service_times = df['service_time_sec'].tolist()
