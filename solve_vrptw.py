@@ -1,52 +1,76 @@
 import pandas as pd
+import random
 import numpy as np
 import osmnx as ox
 import networkx as nx
 import folium
 from ortools.constraint_solver import routing_enums_pb2, pywrapcp
 
-# 1. Load Input Data
+#load in CSV and Time Matrix
 df = pd.read_csv('austin_nodes.csv')
 time_matrix = np.load('time_matrix.npy').tolist()
+
+# generate demands (0 for depot, 1-5 units for stops)
+import random
+random.seed(42) # optional: keep demands consistent
+demands = [0] + [random.randint(1, 5) for _ in range(len(df) - 1)]
 
 num_locations = len(df)
 num_vehicles = 5
 depot_index = 0
 
-# 2. Load Road Network Graph for Street-Level Plotting
+#load Road Network Graph for Street-Level Plotting
 print("Loading Austin road network for exact street route tracing...")
 G = ox.graph_from_place('Austin, Texas, USA', network_type='drive')
 G = ox.add_edge_speeds(G)
 G = ox.add_edge_travel_times(G)
 G = ox.truncate.largest_component(G, strongly=True)
 
-# Map CSV coordinates to the nearest street graph nodes
+#map CSV coordinates to the nearest street graph nodes
 osm_nodes = ox.nearest_nodes(G, X=df['longitude'], Y=df['latitude'])
 
-# 3. Initialize Routing Engine
+#initialize Routing Engine
 manager = pywrapcp.RoutingIndexManager(num_locations, num_vehicles, depot_index)
 routing = pywrapcp.RoutingModel(manager)
 
+#use all vehicles
+solver = routing.solver()
+for vehicle_id in range(num_vehicles):
+    solver.Add(routing.ActiveVehicleVar(vehicle_id) == 1)
+
 service_times = df['service_time_sec'].tolist()
 
-# Register transit callback
+#register transit callback
 transit_callback_index = routing.RegisterTransitCallback(
     lambda from_idx, to_idx: time_matrix[manager.IndexToNode(from_idx)][manager.IndexToNode(to_idx)] + service_times[manager.IndexToNode(from_idx)]
 )
 routing.SetArcCostEvaluatorOfAllVehicles(transit_callback_index)
 
-# 4. Add Time Window Constraints
+#add Time Window Constraints
 time_dimension_name = 'Time'
 routing.AddDimension(
     transit_callback_index,
-    3600,   # waiting time allowed (1 hour)
-    28800,  # Max vehicle shift duration (8 hours)
-    False,  # Do not force start cumulative time to zero
+    3600,   #waiting time allowed (1 hour)
+    28800,  #max vehicle shift duration (8 hours)
+    False,  #do not force start cumulative time to zero
     time_dimension_name
 )
 time_dimension = routing.GetDimensionOrDie(time_dimension_name)
 
-# Set time windows per location from CSV
+#add capacity constraints
+demand_callback_index = routing.RegisterUnaryTransitCallback(
+    lambda from_idx: demands[manager.IndexToNode(from_idx)]
+)
+vehicle_capacity = 50 #max capacity per vehicle
+routing.AddDimensionWithVehicleCapacity(
+    demand_callback_index,
+    0,  #null capacity slack
+    [vehicle_capacity] * num_vehicles,  #vehicle max capacities
+    True,  #start cumul to zero
+    'Capacity'
+)
+
+#set time windows per location from CSV
 for location_idx, row in df.iterrows():
     index = manager.NodeToIndex(location_idx)
     time_dimension.CumulVar(index).SetRange(
@@ -54,12 +78,12 @@ for location_idx, row in df.iterrows():
         int(row['tw_close_sec'])
     )
 
-# Minimize shift duration
+#minimize shift duration
 for i in range(num_vehicles):
     routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.Start(i)))
     routing.AddVariableMinimizedByFinalizer(time_dimension.CumulVar(routing.End(i)))
 
-# 5. Search Parameters & Guided Local Search Metaheuristic
+#search parameters and guided local search metaheuristic
 search_parameters = pywrapcp.DefaultRoutingSearchParameters()
 search_parameters.first_solution_strategy = (
     routing_enums_pb2.FirstSolutionStrategy.PATH_CHEAPEST_ARC
@@ -69,11 +93,14 @@ search_parameters.local_search_metaheuristic = (
 )
 search_parameters.time_limit.seconds = 30
 
-# 6. Solve
+#solve
 print("Solving VRPTW with Google OR-Tools...")
 solution = routing.SolveWithParameters(search_parameters)
 
-# 7. Print Schedules & Export Interactive Street Map
+#===============================================
+#print Schedules & Export Interactive Street Map
+#===============================================
+
 if solution:
     print("\n=== OPTIMAL ROUTES FOUND ===")
     map_austin = folium.Map(
@@ -95,7 +122,7 @@ if solution:
             
             lat, lon = df.loc[node, 'latitude'], df.loc[node, 'longitude']
             
-            # Place Marker for Stop
+            #place Marker for Stop
             folium.Marker(
                 location=[lat, lon],
                 popup=f"V{vehicle_id + 1} - Stop {node}: {df.loc[node, 'name']}",
@@ -104,20 +131,20 @@ if solution:
             
             index = solution.Value(routing.NextVar(index))
 
-        # Add return to depot stop
+        #add return to depot stop
         end_node = manager.IndexToNode(index)
         vehicle_stops.append(end_node)
         time_var = time_dimension.CumulVar(index)
         plan_output += f"  -> Return Depot ({df.loc[end_node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
         print(plan_output)
 
-        # Tracing exact street geometry node-by-node along the route
+        #tracing exact street geometry node-by-node along the route
         for i in range(len(vehicle_stops) - 1):
             orig_osm = osm_nodes[vehicle_stops[i]]
             dest_osm = osm_nodes[vehicle_stops[i + 1]]
             
             try:
-                # Find shortest path along actual road segments
+                #find shortest path along actual road segments
                 path = nx.shortest_path(G, orig_osm, dest_osm, weight='travel_time')
                 street_coords = [(G.nodes[n]['y'], G.nodes[n]['x']) for n in path]
                 
@@ -129,7 +156,7 @@ if solution:
                     tooltip=f"Vehicle {vehicle_id + 1} Route"
                 ).add_to(map_austin)
             except nx.NetworkXNoPath:
-                # Fallback to straight line if path lookup fails
+                #fallback to straight line if path lookup fails
                 loc1 = (df.loc[vehicle_stops[i], 'latitude'], df.loc[vehicle_stops[i], 'longitude'])
                 loc2 = (df.loc[vehicle_stops[i + 1], 'latitude'], df.loc[vehicle_stops[i + 1], 'longitude'])
                 folium.PolyLine([loc1, loc2], color=colors[vehicle_id % len(colors)], weight=3, opacity=0.5).add_to(map_austin)
