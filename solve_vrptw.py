@@ -118,7 +118,24 @@ if solution:
             node = manager.IndexToNode(index)
             vehicle_stops.append(node)
             time_var = time_dimension.CumulVar(index)
-            plan_output += f"  -> Stop {node:02d} ({df.loc[node, 'name']}) | Arrival: {solution.Min(time_var)}s\n"
+            current_time = solution.Value(time_var)
+            if node == depot_index:
+                plan_output += f"  -> Depot start | Time: {current_time}s\n"
+            else:
+                plan_output += f"  -> Stop {node:02d} ({df.loc[node, 'name']}) | Arrival: {current_time}s\n"
+
+            next_index = solution.Value(routing.NextVar(index))
+            next_node = manager.IndexToNode(next_index)
+            next_time = solution.Value(time_dimension.CumulVar(next_index))
+            drive_time = time_matrix[node][next_node]
+            wait_time = max(
+                0,
+                next_time - current_time - drive_time - service_times[node]
+            )
+            plan_output += (
+                f"       Leg to {next_node:02d}: drive {drive_time}s, "
+                f"wait at {node:02d} {wait_time}s\n"
+            )
             
             lat, lon = df.loc[node, 'latitude'], df.loc[node, 'longitude']
             
@@ -129,7 +146,7 @@ if solution:
                 icon=folium.Icon(color=colors[vehicle_id % len(colors)])
             ).add_to(map_austin)
             
-            index = solution.Value(routing.NextVar(index))
+            index = next_index
 
         #add return to depot stop
         end_node = manager.IndexToNode(index)
